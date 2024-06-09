@@ -1,0 +1,33 @@
+{
+    "manifest": {
+        "data": {
+            "fields": {
+                "test": {
+                    "inputName": "test",
+                    "ui": {
+                        "label": "Test"
+                    },
+                    "const": {
+                        "test": "test",
+                        "test2:enc": "dGVzdA=="
+                    },
+                    "validators": [
+                        {
+                            "factory": "alpha"
+                        }
+                    ]
+                },
+                "test2": {
+                    "inputName": "test2",
+                    "ui": {},
+                    "const": {},
+                    "validators": [
+                        {
+                            "factory": "alpha"
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}
