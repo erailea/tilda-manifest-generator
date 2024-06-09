@@ -7,7 +7,6 @@ import {
   GppGoodRounded,
 } from "@mui/icons-material";
 import {
-  CardHeader,
   Container,
   FormControl,
   Grid,
@@ -18,184 +17,18 @@ import {
   Switch,
   TextField,
 } from "@mui/material";
+import {
+  Fields,
+  FormConst,
+  FormField,
+  FormManifest,
+  FormValidator,
+  Manifest,
+  Validator,
+} from "./models";
 import { useEffect, useRef, useState } from "react";
 
 import sampleManifestJson from "./sample-manifest.json";
-
-interface FormManifest {
-  fields: FormField[];
-  hooks?: FormHooks;
-}
-
-interface FormValidator {
-  factory:
-    | "alpha"
-    | "numeric"
-    | "alphanumeric"
-    | "regex"
-    | "length"
-    | "notEmpty"
-    | "enum";
-  minLength?: number;
-  maxLength?: number;
-  onMatch?: "fail" | "pass";
-  enumValues?: string[];
-  regex?: string;
-}
-
-interface Validator {
-  factory:
-    | "alpha"
-    | "numeric"
-    | "alphanumeric"
-    | "regex"
-    | "length"
-    | "notEmpty"
-    | "enum";
-  minLength?: number;
-  maxLength?: number;
-  onMatch?: "fail" | "pass";
-  values?: string[];
-  value?: string;
-}
-
-interface FormField {
-  name: string;
-  label: string;
-  inputName: string;
-  const: FormConst[];
-  validators: FormValidator[];
-}
-
-interface FormConst {
-  name: string;
-  value: string;
-  isSecure: boolean;
-}
-
-interface FormHook {
-  factory: string;
-}
-
-interface FormHooks {
-  pre: FormHook[];
-  post: FormHook[];
-}
-
-interface Constant {
-  [key: string]: string;
-}
-
-interface Ui {
-  label: string;
-}
-
-interface Fields {
-  [key: string]: {
-    inputName: string;
-    ui: Ui;
-    const: Constant;
-    validators: Validator[];
-  };
-}
-
-interface Manifest {
-  data: {
-    fields: Fields;
-  };
-}
-
-function jsonToForm(object: { manifest: Manifest }): FormManifest {
-  const arr: FormField[] = [];
-
-  for (const key in object.manifest.data.fields) {
-    const fieldObj = object.manifest.data.fields[key];
-
-    const constsObj = fieldObj.const;
-    const constsArr: FormConst[] = [];
-    for (const constKey in constsObj) {
-      constsArr.push({
-        isSecure: constKey.endsWith(":enc"),
-        name: constKey.split(":")[0],
-        value: constsObj[constKey],
-      } as FormConst);
-    }
-
-    const validatorsObj = fieldObj.validators;
-    const validatorsArr: FormValidator[] = [];
-    for (const validatorKey in validatorsObj) {
-      const validator = validatorsObj[validatorKey];
-      validatorsArr.push({
-        factory: validator.factory,
-        minLength: validator.minLength,
-        maxLength: validator.maxLength,
-        onMatch: validator.onMatch,
-        enumValues: validator.values,
-        regex: validator.value,
-      });
-    }
-
-    arr.push({
-      name: key,
-      label: fieldObj.ui?.label,
-      inputName: fieldObj.inputName,
-      const: constsArr,
-      validators: validatorsArr,
-    });
-  }
-  return {
-    fields: arr,
-    hooks: {
-      pre: [],
-      post: [],
-    },
-  };
-}
-
-function formToJson(formData: { fields: FormField[] }): string {
-  const fields: Fields = {};
-
-  formData.fields.forEach((element) => {
-    const constObject: {
-      [key: string]: string;
-    } = {};
-    element.const.forEach((c) => {
-      const suffix = c.isSecure ? ":enc" : "";
-      constObject[c.name + suffix] = c.value;
-    });
-
-    const validatorsArr: Validator[] = [];
-
-    element.validators.forEach((v) => {
-      const validator: Validator = {
-        factory: v.factory,
-      };
-      if (v.factory === "length") {
-        validator.minLength = v.minLength;
-        validator.maxLength = v.maxLength;
-      }
-      if (v.factory === "regex") {
-        validator.value = v.regex;
-        validator.onMatch = v.onMatch;
-      }
-      if (v.factory === "enum") {
-        validator.values = v.enumValues;
-      }
-      validatorsArr.push(validator);
-    });
-
-    fields[element.name] = {
-      inputName: element.inputName,
-      ui: {
-        label: element.label,
-      },
-      const: constObject,
-      validators: validatorsArr,
-    };
-  });
-
-  return JSON.stringify({ manifest: { data: { fields: fields } } }, null, 2);
-}
 
 function App() {
   const [manifestJson, setManifestJson] = useState("{}");
@@ -225,7 +58,7 @@ function App() {
     if (isUpdatingFromJson.current && manifestJson && manifestJson !== "{}") {
       try {
         const parsedJson = JSON.parse(manifestJson);
-        const form = jsonToForm(parsedJson);
+        const form = Manifest.toForm(parsedJson);
         setManifestForm(form);
       } catch (e) {
         console.error(e);
@@ -251,8 +84,8 @@ function App() {
     if (isUpdatingFromForm.current && manifestForm) {
       console.log("form to json", manifestForm);
 
-      const json = formToJson(manifestForm);
-      setManifestJson(json);
+      const manifest = FormManifest.toManifest(manifestForm);
+      setManifestJson(JSON.stringify({ manifest }, null, 2));
     }
     isUpdatingFromJson.current = false;
     isUpdatingFromForm.current = false;
