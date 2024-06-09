@@ -1,33 +1,31 @@
 {
-    "manifest": {
-        "data": {
-            "fields": {
-                "test": {
-                    "inputName": "test",
-                    "ui": {
-                        "label": "Test"
-                    },
-                    "const": {
-                        "test": "test",
-                        "test2:enc": "dGVzdA=="
-                    },
-                    "validators": [
-                        {
-                            "factory": "alpha"
-                        }
-                    ]
-                },
-                "test2": {
-                    "inputName": "test2",
-                    "ui": {},
-                    "const": {},
-                    "validators": [
-                        {
-                            "factory": "alpha"
-                        }
-                    ]
-                }
-            }
+  "manifest": {
+    "data": {
+      "fields": {
+        "firstName": {
+          "inputName": "first_name",
+          "ui": {
+            "label": "First Name"
+          },
+          "const": {}
+        },
+        "lastName": {
+          "inputName": "last_name",
+          "ui": {
+            "label": "Last Name"
+          },
+          "const": {}
+        },
+        "citizenId": {
+          "inputName": "citizen_id",
+          "ui": {
+            "label": "Citizen ID"
+          },
+          "const": {
+            "taxId:enc": "1234567890"
+          }
         }
+      }
     }
+  }
 }

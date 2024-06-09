@@ -1,46 +1,85 @@
 import "./App.css";
 
+import {
+  Add,
+  Delete,
+  GppBadRounded,
+  GppGoodRounded,
+} from "@mui/icons-material";
+import {
+  CardHeader,
+  Container,
+  Grid,
+  IconButton,
+  TextField,
+} from "@mui/material";
 import { useEffect, useRef, useState } from "react";
 
 import sampleManifestJson from "./sample-manifest.json";
 
-function jsonToForm(object: {
-  manifest: {
-    data: {
-      fields: {
-        [key: string]: {
-          inputName: string;
-          ui: {
-            label: string;
-          };
-          const: {
-            [key: string]: string;
-          };
-        };
-      };
-    };
-  };
-}): {
+interface FormManifest {
+  fields: FormField[];
+  hooks?: FormHooks;
+}
+
+interface FormField {
   name: string;
   label: string;
   inputName: string;
-  const: {
-    name: string;
-    value: string;
-  }[];
-}[] {
-  const arr = [];
+  const: FormConst[];
+}
+
+interface FormConst {
+  name: string;
+  value: string;
+  isSecure: boolean;
+}
+
+interface FormHook {
+  factory: string;
+}
+
+interface FormHooks {
+  pre: FormHook[];
+  post: FormHook[];
+}
+
+interface Constant {
+  [key: string]: string;
+}
+
+interface Ui {
+  label: string;
+}
+
+interface Fields {
+  [key: string]: {
+    inputName: string;
+    ui: Ui;
+    const: Constant;
+  };
+}
+
+interface Manifest {
+  data: {
+    fields: Fields;
+  };
+}
+
+function jsonToForm(object: { manifest: Manifest }): FormManifest {
+  const arr: FormField[] = [];
 
   for (const key in object.manifest.data.fields) {
     const fieldObj = object.manifest.data.fields[key];
 
     const constsObj = fieldObj.const;
-    const constsArr = [];
+    const constsArr: FormConst[] = [];
     for (const constKey in constsObj) {
       constsArr.push({
-        name: constKey,
+        isSecure: constKey.endsWith(":enc"),
+        name: constKey.split(":")[0],
         value: constsObj[constKey],
-      });
+      } as FormConst);
     }
     arr.push({
       name: key,
@@ -49,7 +88,13 @@ function jsonToForm(object: {
       const: constsArr,
     });
   }
-  return arr;
+  return {
+    fields: arr,
+    hooks: {
+      pre: [],
+      post: [],
+    },
+  };
 }
 
 function formToJson(formData: {
@@ -60,6 +105,7 @@ function formToJson(formData: {
     const: {
       name: string;
       value: string;
+      isSecure: boolean;
     }[];
   }[];
 }): string {
@@ -80,7 +126,8 @@ function formToJson(formData: {
       [key: string]: string;
     } = {};
     element.const.forEach((c) => {
-      constObject[c.name] = c.value;
+      const suffix = c.isSecure ? ":enc" : "";
+      constObject[c.name + suffix] = c.value;
     });
 
     fields[element.name] = {
@@ -101,25 +148,9 @@ function App() {
   const isUpdatingFromForm = useRef(false);
   const isUpdatingFromJson = useRef(true);
 
-  const [manifestForm, setManifestForm] = useState<{
-    fields: {
-      name: string;
-      label: string;
-      inputName: string;
-      const: {
-        name: string;
-        value: string;
-      }[];
-    }[];
-    hooks?: {
-      pre: {
-        factory: string;
-      }[];
-      post: {
-        factory: string;
-      }[];
-    };
-  }>();
+  const [manifestForm, setManifestForm] = useState<FormManifest>({
+    fields: [],
+  });
 
   const resetForm = () => {
     setManifestForm({
@@ -138,23 +169,26 @@ function App() {
     if (isUpdatingFromJson.current && manifestJson && manifestJson !== "{}") {
       try {
         const parsedJson = JSON.parse(manifestJson);
-        const fields = jsonToForm(parsedJson);
-        setManifestForm({
-          fields,
-        });
+        const form = jsonToForm(parsedJson);
+        setManifestForm(form);
       } catch (e) {
         console.error(e);
         resetForm();
+        isUpdatingFromJson.current = true;
+        isUpdatingFromForm.current = false;
       }
     }
     if (
       isUpdatingFromJson.current &&
-      (manifestJson === "{}" || manifestJson === "")
+      (manifestJson === "{}" || manifestJson === "" || !manifestJson)
     ) {
       resetForm();
+      isUpdatingFromJson.current = true;
+      isUpdatingFromForm.current = false;
+    } else {
+      isUpdatingFromForm.current = false;
+      isUpdatingFromJson.current = false;
     }
-    isUpdatingFromForm.current = false;
-    isUpdatingFromJson.current = false;
   }, [manifestJson]);
 
   useEffect(() => {
@@ -174,175 +208,307 @@ function App() {
   }, []);
 
   return (
-    <div style={{ height: "100%" }}>
-      <header className=""></header>
-      <div
-        style={{
-          display: "flex",
-          width: "100%",
-          height: "90%",
-        }}
-      >
-        <div style={{ width: "inherit", padding: "16px" }}>
-          <pre>{JSON.stringify(manifestForm, null, 2)}</pre>
-          {isUpdatingFromJson.current ? "isUpdatingFromJson" : ""}
-          <br />
-          {isUpdatingFromForm.current ? "isUpdatingFromForm" : ""}
+    <Container style={{ padding: "16px" }}>
+      <Grid direction={"row"} container height={"100%"} width={"100%"}>
+        <Grid gap={"16px"} item xs={6} sm={6} md={6} lg={6} xl={6}>
+          <Grid width={"100%"} gap={"16px"} container spacing={"16px"}>
+            <Grid>
+              <span>Fields</span>
+              <IconButton
+                color="primary"
+                onClick={() => {
+                  const newForm = {
+                    fields: [
+                      ...manifestForm.fields,
+                      {
+                        name: manifestForm.fields.length + ". Field",
+                        label: "",
+                        inputName: "",
+                        const: [],
+                      },
+                    ],
+                    hooks: manifestForm.hooks,
+                  };
+                  isUpdatingFromForm.current = true;
+                  isUpdatingFromJson.current = false;
+                  setManifestForm(newForm);
+                }}
+              >
+                <Add />
+              </IconButton>
+            </Grid>
 
-          {manifestForm ? (
-            <>
-              <div style={{ padding: "16px", display: "flex", gap: "4px 8px" }}>
-                <span>Fields</span>
-                <button
-                  onClick={() => {
-                    const newForm = {
-                      fields: [
-                        ...manifestForm.fields,
-                        {
-                          name: manifestForm.fields.length + ". Field",
-                          label: "",
-                          inputName: "",
-                          const: [],
-                        },
-                      ],
-                      hooks: manifestForm.hooks,
-                    };
-                    console.log("add field", newForm);
-                    isUpdatingFromForm.current = true;
-                    isUpdatingFromJson.current = false;
-                    setManifestForm(newForm);
-                  }}
-                >
-                  <span role="img" aria-label="add">
-                    ➕
-                  </span>
-                </button>
-              </div>
-
-              {manifestForm.fields.map((field: any, index: number) => (
-                <div
-                  key={index}
-                  style={{
-                    padding: "8px",
-                    margin: "8px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px 8px",
-                    border: "1px solid black",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "row",
-                      gap: "4px 8px",
-                    }}
-                  >
-                    <input
+            {manifestForm.fields.map((field: any, fieldIndex: number) => (
+              <Grid
+                sx={{
+                  width: "100%",
+                  padding: "16px",
+                  marginBottom: "16px",
+                  "--Grid-borderWidth": "1px",
+                  borderTop: "var(--Grid-borderWidth) solid",
+                  borderLeft: "var(--Grid-borderWidth) solid",
+                  borderRight: "var(--Grid-borderWidth) solid",
+                  borderBottom: "var(--Grid-borderWidth) solid",
+                  borderColor: "divider",
+                }}
+                key={fieldIndex}
+                style={{}}
+              >
+                <Grid gap={"16px"} container>
+                  <Grid item xs={4} sm={4} md={4} lg={4} xl={4}>
+                    <TextField
+                      label={"Field Name"}
                       onChange={(e) => {
-                        //update field name value
+                        const newForm = {
+                          fields: manifestForm.fields.map((f, i) =>
+                            i === fieldIndex
+                              ? { ...f, name: e.target.value }
+                              : f
+                          ),
+                          hooks: manifestForm.hooks,
+                        };
+                        isUpdatingFromForm.current = true;
+                        isUpdatingFromJson.current = false;
+                        setManifestForm(newForm);
                       }}
                       value={field.name}
-                    ></input>
-                    <input
+                    ></TextField>
+                  </Grid>
+
+                  <Grid item xs={4} sm={4} md={4} lg={4} xl={4}>
+                    <TextField
+                      label={"Input Name"}
                       onChange={(e) => {
-                        //update field name value
+                        //find by index and update inputName
+                        const newForm = {
+                          fields: manifestForm.fields.map((f, i) =>
+                            i === fieldIndex
+                              ? { ...f, inputName: e.target.value }
+                              : f
+                          ),
+                          hooks: manifestForm.hooks,
+                        };
+                        isUpdatingFromForm.current = true;
+                        isUpdatingFromJson.current = false;
+                        setManifestForm(newForm);
                       }}
                       value={field.inputName}
-                    ></input>
-                    <button
-                      onClick={() => {
-                        //delete field
-                      }}
-                    >
-                      <span role="img" aria-label="delete">
-                        ❌
-                      </span>
-                    </button>
-                  </div>
+                    ></TextField>
+                  </Grid>
 
-                  <div>
-                    <div
-                      style={{
-                        padding: "16px",
-                        display: "flex",
-                        gap: "4px 8px",
+                  <Grid item xs={3} sm={3} md={3} lg={3} xl={3}>
+                    <IconButton
+                      color="error"
+                      onClick={() => {
+                        const newForm = {
+                          fields: manifestForm.fields.filter(
+                            (f, i) => i !== fieldIndex
+                          ),
+                          hooks: manifestForm.hooks,
+                        };
+                        isUpdatingFromForm.current = true;
+                        isUpdatingFromJson.current = false;
+                        setManifestForm(newForm);
                       }}
+                      aria-label="delete"
+                      size="medium"
                     >
-                      <span>Consts</span>
-                      <button
-                        onChange={() => {
-                          //add field
-                        }}
-                      >
-                        <span role="img" aria-label="delete">
-                          ➕
-                        </span>
-                      </button>
-                    </div>
-                    <div style={{ flexDirection: "column" }}>
-                      {field.const.map((c: any, index: number) => (
-                        <div
-                          key={index}
-                          style={{
-                            display: "flex",
-                            flexDirection: "row",
-                            gap: "4px 8px",
-                          }}
-                        >
-                          <input
+                      <Delete fontSize="inherit" />
+                    </IconButton>
+                  </Grid>
+                </Grid>
+                <Grid>
+                  <span>Constant Values</span>
+                  <IconButton
+                    color="primary"
+                    onClick={() => {
+                      //find field by fieldIndex and add new const
+                      const newForm = {
+                        fields: manifestForm.fields.map((f, i) =>
+                          i === fieldIndex
+                            ? {
+                                ...f,
+                                const: [
+                                  ...f.const,
+                                  {
+                                    name: f.const.length + 1 + ". const",
+                                    value: "",
+                                    isSecure: false,
+                                  },
+                                ],
+                              }
+                            : f
+                        ),
+                        hooks: manifestForm.hooks,
+                      };
+                      isUpdatingFromForm.current = true;
+                      isUpdatingFromJson.current = false;
+                      setManifestForm(newForm);
+                    }}
+                  >
+                    <Add />
+                  </IconButton>
+                </Grid>
+                {field.const.length > 0 && (
+                  <Grid
+                    sx={{
+                      width: "100%",
+                      padding: "16px",
+                      marginBottom: "16px",
+                      "--Grid-borderWidth": "1px",
+                      borderTop: "var(--Grid-borderWidth) solid",
+                      borderLeft: "var(--Grid-borderWidth) solid",
+                      borderRight: "var(--Grid-borderWidth) solid",
+                      borderBottom: "var(--Grid-borderWidth) solid",
+                      borderColor: "divider",
+                    }}
+                    gap={"2px"}
+                    container
+                  >
+                    {field.const.map((c: any, constIndex: number) => (
+                      <Grid gap={"16px"} container key={constIndex}>
+                        <Grid item xs={4} sm={4} md={4} lg={4} xl={4}>
+                          <TextField
                             onChange={(e) => {
-                              //update const name value
+                              //find field by fieldIndex and const by constIndex and update name
+                              const newForm = {
+                                fields: manifestForm.fields.map((f, i) =>
+                                  i === fieldIndex
+                                    ? {
+                                        ...f,
+                                        const: f.const.map((c, j) =>
+                                          j === constIndex
+                                            ? { ...c, name: e.target.value }
+                                            : c
+                                        ),
+                                      }
+                                    : f
+                                ),
+                                hooks: manifestForm.hooks,
+                              };
+                              isUpdatingFromForm.current = true;
+                              isUpdatingFromJson.current = false;
+                              setManifestForm(newForm);
                             }}
                             value={c.name}
-                          ></input>
-                          <input
+                          ></TextField>
+                        </Grid>
+                        <Grid item xs={4} sm={4} md={4} lg={4} xl={4}>
+                          <TextField
                             onChange={(e) => {
-                              //update const value
+                              //find field by fieldIndex and const by constIndex and update value
+                              const newForm = {
+                                fields: manifestForm.fields.map((f, i) =>
+                                  i === fieldIndex
+                                    ? {
+                                        ...f,
+                                        const: f.const.map((c, j) =>
+                                          j === constIndex
+                                            ? {
+                                                ...c,
+                                                value: e.target.value,
+                                              }
+                                            : c
+                                        ),
+                                      }
+                                    : f
+                                ),
+                                hooks: manifestForm.hooks,
+                              };
+                              isUpdatingFromForm.current = true;
+                              isUpdatingFromJson.current = false;
+                              setManifestForm(newForm);
                             }}
                             value={c.value}
-                          ></input>
-                          <button
-                            onChange={() => {
-                              //delete const
+                          ></TextField>
+                        </Grid>
+                        <Grid item xs={1} sm={1} md={1} lg={1} xl={1}>
+                          <IconButton
+                            color="error"
+                            onClick={() => {
+                              const newForm = {
+                                fields: manifestForm.fields.map((f, i) =>
+                                  i === fieldIndex
+                                    ? {
+                                        ...f,
+                                        const: f.const.filter(
+                                          (c, j) => j !== constIndex
+                                        ),
+                                      }
+                                    : f
+                                ),
+                                hooks: manifestForm.hooks,
+                              };
+                              isUpdatingFromForm.current = true;
+                              isUpdatingFromJson.current = false;
+                              setManifestForm(newForm);
                             }}
+                            aria-label="delete"
+                            size="medium"
                           >
-                            <span role="img" aria-label="delete">
-                              ❌
-                            </span>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </>
-          ) : (
-            <></>
-          )}
-        </div>
-        <div style={{ width: "inherit", padding: "16px" }}>
-          <textarea
-            style={{
-              borderStyle: "",
-              borderWidth: "",
-              borderColor: "",
-              boxShadow: "inset 0px 0px 0px 0px red",
-              width: "100%",
-              height: "100%",
-              resize: "none",
-            }}
+                            <Delete fontSize="inherit" />
+                          </IconButton>
+                        </Grid>
+                        <Grid item xs={1} sm={1} md={1} lg={1} xl={1}>
+                          <IconButton
+                            color={c.isSecure ? "success" : "error"}
+                            onClick={() => {
+                              //find field by fieldIndex and const by constIndex and update isSecure
+                              const newForm = {
+                                fields: manifestForm.fields.map((f, i) =>
+                                  i === fieldIndex
+                                    ? {
+                                        ...f,
+                                        const: f.const.map((c, j) =>
+                                          j === constIndex
+                                            ? {
+                                                ...c,
+                                                isSecure: !c.isSecure,
+                                              }
+                                            : c
+                                        ),
+                                      }
+                                    : f
+                                ),
+                                hooks: manifestForm.hooks,
+                              };
+                              isUpdatingFromForm.current = true;
+                              isUpdatingFromJson.current = false;
+                              setManifestForm(newForm);
+                            }}
+                            aria-label="delete"
+                            size="medium"
+                          >
+                            {c.isSecure ? (
+                              <GppGoodRounded fontSize="inherit" />
+                            ) : (
+                              <GppBadRounded fontSize="inherit" />
+                            )}
+                          </IconButton>
+                        </Grid>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
+              </Grid>
+            ))}
+          </Grid>
+        </Grid>
+        <Grid item xs={6} sm={6} md={6} lg={6} xl={6}>
+          <TextField
+            multiline
+            rows={30}
+            style={{ width: "100%" }}
             onChange={(e) => {
               isUpdatingFromJson.current = true;
               isUpdatingFromForm.current = false;
               setManifestJson(e.target.value);
             }}
             value={manifestJson}
-          ></textarea>
-        </div>
-      </div>
-    </div>
+          ></TextField>
+        </Grid>
+      </Grid>
+    </Container>
   );
 }
 
